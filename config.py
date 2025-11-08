@@ -5,6 +5,9 @@ This module serves as the single source of truth for all configuration parameter
 used throughout the document processing pipeline. It provides centralized, organized
 settings that can be easily modified without changing implementation code.
 
+Dependencies:
+    pip install langchain-groq
+
 Usage:
     from config import PipelineConfig
 
@@ -18,6 +21,12 @@ Design Philosophy:
     - Documented: Each setting includes explanation and reasoning
     - Extensible: Easy to add new configuration sections as pipeline grows
 """
+
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 
 class ChunkingConfig:
@@ -281,6 +290,169 @@ class VectorStoreConfig:
     NAMING_CONVENTION: str = 'custom'
 
 
+class GroqConfig:
+    """
+    Configuration settings for Groq LLM integration.
+
+    This stage uses Groq's ultra-fast inference API to extract structured JSON from retrieved
+    document chunks. Groq provides excellent performance and cost-efficiency for structured
+    extraction tasks.
+
+    Attributes:
+        GROQ_API_KEY: Groq API key for authentication.
+                     Default: Loaded from GROQ_API_KEY environment variable
+                     Reasoning:
+                     - Keeps credentials secure (never hardcode API keys)
+                     - Uses .env file for local development
+                     - Compatible with production environment variable systems
+                     - Prevents accidental exposure in version control
+
+        MODEL_NAME: Groq model identifier to use for extraction.
+                   Default: 'llama-3.3-70b-versatile'
+                   Options:
+                   - 'llama-3.3-70b-versatile': Latest LLaMA 3.3 70B (excellent quality, 128K context)
+                   - 'llama-3.1-70b-versatile': LLaMA 3.1 70B (very good quality, 128K context)
+                   - 'mixtral-8x7b-32768': Mixtral MoE (32K context, good for long docs)
+                   - 'llama-3.1-8b-instant': 8B parameter LLaMA 3.1 (fastest, good quality)
+                   Reasoning:
+                   - llama-3.3-70b-versatile offers excellent quality for structured extraction
+                   - Groq's LPU inference provides blazing-fast response times (~500-1000 tokens/sec)
+                   - Strong instruction-following capabilities for JSON generation
+                   - 128K token context window handles very large documents
+                   - Cost-effective compared to proprietary APIs
+
+        TEMPERATURE: Sampling temperature for LLM responses.
+                    Default: 0 (deterministic)
+                    Range: 0.0 to 1.0
+                    Reasoning:
+                    - 0 = deterministic, same input → same output
+                    - Critical for extraction tasks requiring consistency
+                    - Reduces variability in JSON structure
+                    - Improves reliability and testability
+                    - Higher values (0.7-1.0) for creative tasks only
+
+        MAX_TOKENS: Maximum number of tokens in LLM response.
+                   Default: 4096
+                   Reasoning:
+                   - Sufficient for detailed JSON responses
+                   - Typical extraction: 500-2000 tokens
+                   - 4096 provides safety margin for complex documents
+                   - Prevents truncation of large extractions
+                   - Balance between completeness and inference cost
+
+        TIMEOUT: Maximum time to wait for LLM response (seconds).
+                Default: 30
+                Reasoning:
+                - Groq typically responds in <2 seconds due to LPU speed
+                - 30 seconds provides generous safety margin
+                - Prevents indefinite hangs
+                - Allows graceful error handling
+
+        RETRY_ATTEMPTS: Number of retry attempts for failed API calls.
+                       Default: 3
+                       Reasoning:
+                       - Handles transient network issues
+                       - Groq API rate limits (automatic retry with backoff)
+                       - 3 attempts = good balance vs. excessive waiting
+                       - Exponential backoff between attempts
+
+        TOP_P: Nucleus sampling parameter (alternative to temperature).
+              Default: 1.0
+              Range: 0.0 to 1.0
+              Reasoning:
+              - 1.0 = consider all tokens (standard setting)
+              - Used in conjunction with temperature for controlled generation
+              - For deterministic extraction, keep at 1.0
+
+        STREAM: Whether to stream responses token-by-token.
+               Default: False
+               Reasoning:
+               - False for JSON parsing (need complete response)
+               - True for interactive applications (see tokens as they generate)
+               - Groq's streaming is extremely fast when enabled
+
+    Performance Notes:
+        - Groq LPU delivers industry-leading inference speed
+        - Typical latency: <1 second for most extraction tasks
+        - Throughput: ~500-1000 tokens/second (depends on model)
+        - Much faster than traditional GPU-based inference
+
+    Cost Notes:
+        - Groq pricing is very competitive and usage-based
+        - Typically significantly cheaper than proprietary APIs
+        - Monitor usage via Groq console at https://console.groq.com
+    """
+
+    # Groq API key (loaded from environment variable)
+    # Set in .env file: GROQ_API_KEY=your_key_here
+    # Get your key from: https://console.groq.com/keys
+    GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
+
+    # Groq model to use for extraction
+    # llama-3.3-70b-versatile provides excellent quality/speed/cost balance
+    # Other options: llama-3.1-70b-versatile, mixtral-8x7b-32768
+    MODEL_NAME: str = "llama-3.3-70b-versatile"
+
+    # Temperature for sampling (0 = deterministic, 1 = creative)
+    # Use 0 for extraction to ensure consistency
+    TEMPERATURE: float = 0.0
+
+    # Maximum tokens in response (extraction typically needs 500-2000)
+    # 4096 provides safety margin for complex documents
+    MAX_TOKENS: int = 4096
+
+    # Request timeout in seconds
+    # Groq is fast, typically responds in <2 seconds
+    TIMEOUT: int = 30
+
+    # Number of retry attempts for failed API calls
+    # Handles transient errors and rate limits
+    RETRY_ATTEMPTS: int = 3
+
+    # Nucleus sampling parameter (use with temperature)
+    # 1.0 = consider all tokens (standard for deterministic extraction)
+    TOP_P: float = 1.0
+
+    # Whether to stream responses (useful for long responses)
+    # Set to False for JSON parsing (need complete response)
+    STREAM: bool = False
+
+
+# Legacy LLMConfig class (Anthropic/Claude) - kept for reference
+# This can be removed once Groq migration is confirmed working
+class LLMConfig:
+    """
+    DEPRECATED: Configuration for Claude/Anthropic LLM (legacy).
+
+    This configuration is kept for backward compatibility and reference.
+    The pipeline now uses GroqConfig as the default LLM provider.
+    """
+
+    # Anthropic API key (loaded from environment variable)
+    API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
+
+    # Claude model to use for extraction
+    MODEL_NAME: str = "claude-3-5-sonnet-20240620"
+
+    # Temperature for sampling
+    TEMPERATURE: float = 0.0
+
+    # Maximum tokens in response
+    MAX_TOKENS: int = 4096
+
+    # Request timeout in seconds
+    TIMEOUT: int = 60
+
+    # Number of retry attempts for failed API calls
+    RETRY_ATTEMPTS: int = 3
+
+    # Enable prompt caching for cost savings
+    ENABLE_CACHING: bool = True
+
+    # Whether to stream responses
+    STREAM_RESPONSE: bool = False
+
+
 class PipelineConfig:
     """
     Master configuration object for the entire document processing pipeline.
@@ -293,6 +465,7 @@ class PipelineConfig:
         chunking: Configuration for text chunking operations
         embedding: Configuration for vector embedding generation
         vector_store: Configuration for vector store operations
+        llm: Configuration for LLM integration (now using Groq)
 
     Usage:
         from config import PipelineConfig
@@ -302,10 +475,10 @@ class PipelineConfig:
         supported_formats = PipelineConfig.extraction.SUPPORTED_FORMATS
         embedding_model = PipelineConfig.embedding.MODEL_NAME
         search_k = PipelineConfig.vector_store.DEFAULT_SEARCH_K
+        llm_model = PipelineConfig.llm.MODEL_NAME
 
     Future Expansion:
         As new pipeline stages are added, new configuration sections will be added here:
-        - llm: Configuration for LLM integration and prompting
         - output: Configuration for JSON output generation
     """
 
@@ -321,8 +494,10 @@ class PipelineConfig:
     # Vector store operations settings
     vector_store = VectorStoreConfig()
 
+    # LLM integration settings (using Groq for performance and cost efficiency)
+    llm = GroqConfig()
+
     # Future configuration sections will be added here as the pipeline grows:
-    # llm = LLMConfig()                  # Coming next
     # output = OutputConfig()            # Coming later
 
 
@@ -364,6 +539,19 @@ def print_config():
     print(f"Similarity metric: {PipelineConfig.vector_store.SIMILARITY_METRIC}")
     print(f"Auto-save: {PipelineConfig.vector_store.AUTO_SAVE}")
     print(f"Naming convention: {PipelineConfig.vector_store.NAMING_CONVENTION}")
+
+    print("\n--- LLM CONFIGURATION (GROQ) ---")
+    api_key_status = "Set" if PipelineConfig.llm.GROQ_API_KEY else "Not set"
+    api_key_preview = f"...{PipelineConfig.llm.GROQ_API_KEY[-8:]}" if PipelineConfig.llm.GROQ_API_KEY else "N/A"
+    print(f"Provider: Groq (https://groq.com)")
+    print(f"API Key: {api_key_status} ({api_key_preview})")
+    print(f"Model: {PipelineConfig.llm.MODEL_NAME}")
+    print(f"Temperature: {PipelineConfig.llm.TEMPERATURE}")
+    print(f"Max tokens: {PipelineConfig.llm.MAX_TOKENS}")
+    print(f"Timeout: {PipelineConfig.llm.TIMEOUT} seconds")
+    print(f"Retry attempts: {PipelineConfig.llm.RETRY_ATTEMPTS}")
+    print(f"Top P: {PipelineConfig.llm.TOP_P}")
+    print(f"Stream: {PipelineConfig.llm.STREAM}")
 
     print("\n" + "=" * 80)
 

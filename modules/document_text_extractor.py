@@ -141,13 +141,13 @@ if __name__ == '__main__':
     # Replace these paths with actual test file paths on your system
 
     # Example 1: Test with a .txt file
-    test_file_path = "sample_document.txt"
+    # test_file_path = "\sample\txt\sample_document.txt"
 
     # Example 2: Test with a .pdf file (uncomment to use)
     # test_file_path = "sample_document.pdf"
 
     # Example 3: Test with a .docx file (uncomment to use)
-    # test_file_path = "sample_document.docx"
+    test_file_path = "../data/samples/doc/sample_rfp.docx"
 
     print("=" * 70)
     print("DOCUMENT TEXT EXTRACTION & NORMALIZATION - Testing")

@@ -35,10 +35,16 @@ Architecture:
 """
 
 import os
+import sys
 from pathlib import Path
+
+# Add modules directory to Python path so imports work after refactoring
+sys.path.insert(0, str(Path(__file__).parent / 'modules'))
+
 from document_text_extractor import extract_text_from_document
 from text_chunker import chunk_text
-from embedding_generator import generate_embeddings
+from embedding_generator import generate_embeddings, create_embeddings
+from vector_store_manager import create_vector_store, save_vector_store
 from config import PipelineConfig
 
 
@@ -194,6 +200,93 @@ def process_document_to_embeddings(
     return embeddings
 
 
+def process_document_to_vector_store(
+    file_path: str,
+    store_name: str,
+    persist_directory: str = "./data",
+    chunk_size: int = None,
+    chunk_overlap: int = None,
+    model_name: str = None
+) -> str:
+    """
+    Process a document through the complete pipeline and save as a vector store.
+
+    This function orchestrates the end-to-end workflow from document to persisted vector store:
+        1. Extracts and normalizes text from the document
+        2. Splits the text into semantically coherent chunks
+        3. Generates vector embeddings for each chunk
+        4. Creates a FAISS vector store from the embeddings
+        5. Saves the vector store to disk for later use
+
+    This is the primary high-level function for creating searchable document stores.
+
+    Args:
+        file_path: Path to the document file (supports .txt, .pdf, .docx)
+        store_name: Name for the vector store (used as subdirectory name)
+        persist_directory: Base directory where the store will be saved (default: "./data")
+        chunk_size: Optional override for chunk size in characters
+        chunk_overlap: Optional override for chunk overlap in characters
+        model_name: Optional override for embedding model
+
+    Returns:
+        The full path where the vector store was saved
+
+    Raises:
+        Returns error string if document format is not supported
+
+    Example:
+        >>> save_path = process_document_to_vector_store(
+        ...     "sample_document.txt",
+        ...     "test_vector_store",
+        ...     "./data"
+        ... )
+        >>> print(f"Vector store saved to: {save_path}")
+    """
+    # Step 1: Process document to chunks
+    chunks = process_document_to_chunks(
+        file_path,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap
+    )
+
+    # Check if chunking was successful
+    if isinstance(chunks, str) and chunks.startswith("File type"):
+        return chunks
+
+    # Step 2: Generate embeddings
+    final_model_name = model_name if model_name is not None else PipelineConfig.embedding.MODEL_NAME
+    embeddings_list = generate_embeddings(chunks, final_model_name)
+
+    # Step 3: Create metadata for each chunk
+    metadatas = [
+        {
+            "source": os.path.basename(file_path),
+            "chunk_id": i,
+            "chunk_size": len(chunk)
+        }
+        for i, chunk in enumerate(chunks)
+    ]
+
+    # Step 4: Create vector store
+    vector_store = create_vector_store(
+        chunks=chunks,
+        embeddings=embeddings_list,
+        metadatas=metadatas
+    )
+
+    # Step 5: Ensure persist directory exists
+    os.makedirs(persist_directory, exist_ok=True)
+
+    # Step 6: Save vector store
+    saved_path = save_vector_store(
+        vector_store,
+        store_name,
+        persist_directory
+    )
+
+    return saved_path
+
+
 if __name__ == '__main__':
     # Comprehensive test block demonstrating the complete end-to-end pipeline
 
@@ -202,7 +295,7 @@ if __name__ == '__main__':
     print("=" * 80)
 
     # Test document path (update this to test with different files)
-    test_document = "sample_document.txt"
+    test_document = "./sample/doc/sample_rfp.docx"
 
     # Check if test document exists
     if not os.path.exists(test_document):
@@ -395,3 +488,40 @@ if __name__ == '__main__':
     print("  2. Add query and retrieval capabilities")
     print("  3. Integrate with LLM for JSON output generation")
     print("  4. Build end-user interface or API")
+
+    # Create test vector store for query_processor.py
+    print("\n\n" + "=" * 80)
+    print("CREATING TEST VECTOR STORE")
+    print("=" * 80)
+
+    vector_store_name = "test_vector_store"
+    persist_directory = "./data"
+
+    print(f"\nCreating vector store for query processor testing...")
+    print(f"  Store name: {vector_store_name}")
+    print(f"  Persist directory: {persist_directory}")
+
+    try:
+        saved_path = process_document_to_vector_store(
+            file_path=test_document,
+            store_name=vector_store_name,
+            persist_directory=persist_directory
+        )
+
+        print(f"\n[OK] Vector store saved to: {saved_path}")
+
+        # Verify files were created
+        index_file = os.path.join(saved_path, "index.faiss")
+        pkl_file = os.path.join(saved_path, "index.pkl")
+
+        if os.path.exists(index_file):
+            print(f"[OK] index.faiss created ({os.path.getsize(index_file):,} bytes)")
+        if os.path.exists(pkl_file):
+            print(f"[OK] index.pkl created ({os.path.getsize(pkl_file):,} bytes)")
+
+        print("\n" + "=" * 80)
+        print("Test vector store is ready for query_processor.py!")
+        print("=" * 80)
+
+    except Exception as e:
+        print(f"\n[ERROR] Failed to create test vector store: {e}")

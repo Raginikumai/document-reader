@@ -22,6 +22,32 @@ Technical Notes:
 from langchain_huggingface import HuggingFaceEmbeddings
 
 
+def create_embeddings(model_name: str = "sentence-transformers/all-MiniLM-L6-v2") -> HuggingFaceEmbeddings:
+    """
+    Create a HuggingFaceEmbeddings object for use with vector stores.
+
+    This function initializes and returns an embedding model object that can be used
+    by vector stores (like FAISS or Chroma) for encoding queries and documents.
+
+    Args:
+        model_name: HuggingFace model identifier (default: 'sentence-transformers/all-MiniLM-L6-v2')
+
+    Returns:
+        A HuggingFaceEmbeddings object configured for semantic search
+
+    Example:
+        >>> embeddings = create_embeddings()
+        >>> from vector_store_manager import load_vector_store
+        >>> store = load_vector_store('my_store', './data', embeddings)
+    """
+    embedding_model = HuggingFaceEmbeddings(
+        model_name=model_name,
+        model_kwargs={'device': 'cpu'},
+        encode_kwargs={'normalize_embeddings': True}
+    )
+    return embedding_model
+
+
 def generate_embeddings(chunks: list[str], model_name: str) -> list[list[float]]:
     """
     Generate dense vector embeddings from text chunks using a HuggingFace model.
