@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python pipeline.py:*)",
+      "Bash(python embedding_generator.py:*)",
+      "Bash(pip install:*)",
+      "Bash(pip show:*)",
+      "Bash(python config.py:*)",
+      "Bash(python vector_store_manager.py:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
